@@ -29,11 +29,9 @@
     header { display: flex; gap: 16px; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
     h1 { margin: 0 0 4px; font-size: clamp(1.35rem, 4vw, 2rem); }
     .subtitle { margin: 0; color: var(--muted); line-height: 1.35; max-width: 760px; }
-    .prototype { background: #fff3cd; border: 1px solid #efd777; border-radius: 999px; padding: 5px 9px; font-size: .82rem; white-space: nowrap; }
-    .toolbar { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; margin-bottom: 10px; }
-    .stat, .control { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 9px 11px; }
-    .stat-label, .control label { display: block; font-size: .75rem; color: var(--muted); margin-bottom: 3px; }
-    .stat strong { font-size: 1.15rem; }
+    .toolbar { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-bottom: 10px; }
+    .control { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 9px 11px; }
+    .control label { display: block; font-size: .75rem; color: var(--muted); margin-bottom: 3px; }
     select { width: 100%; border: 0; background: transparent; color: var(--ink); outline: none; }
     .layout { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(280px, .75fr); gap: 12px; align-items: start; }
     .map-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); }
@@ -44,10 +42,6 @@
     .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); }
     .panel h2 { font-size: 1.05rem; margin: 0 0 5px; }
     .selected { color: var(--muted); font-size: .9rem; margin-bottom: 12px; }
-    .cell-summary { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin: 9px 0 14px; }
-    .mini { border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
-    .mini span { display:block; color:var(--muted); font-size:.72rem; }
-    .mini strong { font-size:1.05rem; }
     .field { margin: 12px 0; }
     .field > label { display: block; font-weight: 600; margin-bottom: 6px; }
     .severity { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
@@ -76,8 +70,7 @@
       .panel { box-shadow:none; }
     }
     @media (max-width: 480px) {
-      .prototype { display:none; }
-      .stat, .control { padding: 8px; }
+      .control { padding: 8px; }
       .severity { grid-template-columns: repeat(2,1fr); }
     }
   </style>
@@ -89,7 +82,6 @@
       <h1>🪰 The Pastures Fly Tracker</h1>
       <p class="subtitle">Tap the 50 m square where you are seeing flies, choose how bad they are, then submit. The map shows combined reports from residents.</p>
     </div>
-    <div class="prototype" id="modeBadge">Prototype — test data</div>
   </header>
 
   <div class="toolbar">
@@ -111,8 +103,6 @@
         <option value="Street/outdoors">Street / outdoors</option>
       </select>
     </div>
-    <div class="stat"><span class="stat-label">Reports shown</span><strong id="reportTotal">—</strong></div>
-    <div class="stat"><span class="stat-label">Squares reporting</span><strong id="activeCells">—</strong></div>
   </div>
 
   <div class="layout">
@@ -132,11 +122,6 @@
     <aside class="panel">
       <h2>Report flies</h2>
       <div class="selected" id="selectedText">Tap a square on the map to start.</div>
-      <div class="cell-summary" id="cellSummary" hidden>
-        <div class="mini"><span>Average severity</span><strong id="cellAverage">—</strong></div>
-        <div class="mini"><span>Reports in square</span><strong id="cellCount">—</strong></div>
-      </div>
-
       <div class="field">
         <label>How bad are the flies?</label>
         <div class="severity" id="severityButtons"></div>
@@ -159,10 +144,9 @@
       <button class="submit" id="submitButton" type="button" disabled>Submit report</button>
       <div class="status" id="status" aria-live="polite"></div>
       <p class="help">Please choose the nearest square rather than giving your house number. A report stores the grid square, not your exact address.</p>
-      <p class="help">To help identify duplicate or abusive reports and diagnose technical problems, the private report log also stores basic browser, device and connection information supplied by your browser. It does not create a persistent device ID, and this setup cannot see or record your IP address.</p>
     </aside>
   </div>
-  <p class="privacy">Map data © OpenStreetMap contributors. Square colours represent aggregated reports and should be interpreted alongside the number of reports in each square. The public map contains aggregate grid statistics only; comments and technical report metadata remain in the private reporting sheet.</p>
+  <p class="privacy">Map data © OpenStreetMap contributors.</p>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -188,18 +172,12 @@
     loading: document.getElementById('loading'),
     timeWindow: document.getElementById('timeWindow'),
     whereFilter: document.getElementById('whereFilter'),
-    reportTotal: document.getElementById('reportTotal'),
-    activeCells: document.getElementById('activeCells'),
     selectedText: document.getElementById('selectedText'),
-    cellSummary: document.getElementById('cellSummary'),
-    cellAverage: document.getElementById('cellAverage'),
-    cellCount: document.getElementById('cellCount'),
     severityButtons: document.getElementById('severityButtons'),
     whereSelect: document.getElementById('whereSelect'),
     notes: document.getElementById('notes'),
     submitButton: document.getElementById('submitButton'),
     status: document.getElementById('status'),
-    modeBadge: document.getElementById('modeBadge'),
   };
 
   buildSeverityButtons();
@@ -324,22 +302,12 @@
     };
 
     els.loading.hidden = true;
-    els.modeBadge.textContent = appData.testReports > 0 ? 'Prototype — includes test data' : 'Live resident map';
     drawGrid();
     refreshView();
   }
 
   function refreshView() {
     if (!appData) return;
-    let reports = 0;
-    let active = 0;
-    appData.grid.forEach(function(cell) {
-      const metric = getCellMetric(cell.id);
-      reports += metric.count;
-      if (metric.count > 0) active++;
-    });
-    els.reportTotal.textContent = String(reports);
-    els.activeCells.textContent = String(active);
     refreshGridStyles();
     refreshSelectedSummary();
   }
@@ -440,14 +408,9 @@
   function refreshSelectedSummary() {
     if (!selectedId) {
       els.selectedText.textContent = 'Tap a square on the map to start.';
-      els.cellSummary.hidden = true;
       return;
     }
-    const metric = getCellMetric(selectedId);
     els.selectedText.textContent = 'Selected square ' + selectedId + ' (50 m × 50 m)';
-    els.cellSummary.hidden = false;
-    els.cellAverage.textContent = metric.count && metric.average !== null ? metric.average.toFixed(1) + ' / 5' : 'Low default';
-    els.cellCount.textContent = String(metric.count);
   }
 
   function updateSubmitState() {
