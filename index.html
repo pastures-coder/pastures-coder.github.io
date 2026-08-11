@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>The Pastures Fly Tracker</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <style>
+    :root {
+      --ink: #17202a;
+      --muted: #65717e;
+      --line: #d8dee5;
+      --panel: #ffffff;
+      --bg: #f5f7f9;
+      --primary: #176b87;
+      --primary-dark: #10556c;
+      --none: #dfe5ea;
+      --low: #66bd63;
+      --mild: #d9ef8b;
+      --medium: #fee08b;
+      --high: #f46d43;
+      --severe: #d73027;
+      --shadow: 0 8px 24px rgba(0,0,0,.09);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; font-family: Arial, Helvetica, sans-serif; color: var(--ink); background: var(--bg); }
+    button, select, textarea { font: inherit; }
+    .app { max-width: 1180px; margin: 0 auto; padding: 14px; }
+    header { display: flex; gap: 16px; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+    h1 { margin: 0 0 4px; font-size: clamp(1.35rem, 4vw, 2rem); }
+    .subtitle { margin: 0; color: var(--muted); line-height: 1.35; max-width: 760px; }
+    .prototype { background: #fff3cd; border: 1px solid #efd777; border-radius: 999px; padding: 5px 9px; font-size: .82rem; white-space: nowrap; }
+    .toolbar { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; margin-bottom: 10px; }
+    .stat, .control { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 9px 11px; }
+    .stat-label, .control label { display: block; font-size: .75rem; color: var(--muted); margin-bottom: 3px; }
+    .stat strong { font-size: 1.15rem; }
+    select { width: 100%; border: 0; background: transparent; color: var(--ink); outline: none; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(280px, .75fr); gap: 12px; align-items: start; }
+    .map-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); }
+    #map { height: min(70vh, 720px); min-height: 520px; width: 100%; background: #e7edf1; }
+    .legend { position: absolute; z-index: 800; bottom: 12px; left: 12px; background: rgba(255,255,255,.96); border: 1px solid var(--line); border-radius: 10px; padding: 8px 9px; box-shadow: 0 3px 12px rgba(0,0,0,.10); font-size: .72rem; }
+    .legend-row { display: flex; align-items: center; gap: 5px; margin: 3px 0; }
+    .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,.15); }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); }
+    .panel h2 { font-size: 1.05rem; margin: 0 0 5px; }
+    .selected { color: var(--muted); font-size: .9rem; margin-bottom: 12px; }
+    .cell-summary { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin: 9px 0 14px; }
+    .mini { border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+    .mini span { display:block; color:var(--muted); font-size:.72rem; }
+    .mini strong { font-size:1.05rem; }
+    .field { margin: 12px 0; }
+    .field > label { display: block; font-weight: 600; margin-bottom: 6px; }
+    .severity { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
+    .severity button { min-height: 52px; border: 1px solid var(--line); background: #fff; border-radius: 10px; cursor: pointer; padding: 6px 4px; }
+    .severity button strong { display:block; font-size:1.05rem; }
+    .severity button span { display:block; font-size:.68rem; color:var(--muted); }
+    .severity button[aria-pressed="true"] { border: 3px solid var(--primary); padding: 4px 2px; background:#eff8fb; }
+    .field select, textarea { width: 100%; border: 1px solid var(--line); background:#fff; border-radius: 10px; padding: 10px; }
+    textarea { resize: vertical; min-height: 68px; }
+    .submit { width: 100%; min-height: 44px; border: 0; border-radius: 10px; background: var(--primary); color: white; font-weight: 700; cursor: pointer; }
+    .submit:hover { background: var(--primary-dark); }
+    .submit:disabled { opacity:.55; cursor:not-allowed; }
+    .help { color: var(--muted); font-size: .78rem; line-height: 1.35; margin-top: 9px; }
+    .status { min-height: 20px; margin-top: 8px; font-size: .86rem; }
+    .status.ok { color: #18733a; }
+    .status.err { color: #a51d1d; }
+    .privacy { margin: 12px 2px 0; color: var(--muted); font-size:.76rem; line-height:1.4; }
+    .leaflet-tooltip.grid-tip { padding: 5px 7px; font-size: 12px; }
+    .loading { position:absolute; z-index:900; top:12px; left:50%; transform:translateX(-50%); background:#fff; border:1px solid var(--line); border-radius:999px; padding:7px 11px; box-shadow:var(--shadow); font-size:.84rem; }
+    @media (max-width: 820px) {
+      .app { padding: 9px; }
+      header { align-items: flex-start; }
+      .toolbar { grid-template-columns: repeat(2,1fr); }
+      .layout { grid-template-columns: 1fr; }
+      #map { min-height: 440px; height: 56vh; }
+      .panel { box-shadow:none; }
+    }
+    @media (max-width: 480px) {
+      .prototype { display:none; }
+      .stat, .control { padding: 8px; }
+      .severity { grid-template-columns: repeat(2,1fr); }
+    }
+  </style>
+  <script src="config.js"></script>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>🪰 The Pastures Fly Tracker</h1>
+      <p class="subtitle">Tap the 50 m square where you are seeing flies, choose how bad they are, then submit. The map shows combined reports from residents.</p>
+    </div>
+    <div class="prototype" id="modeBadge">Prototype — test data</div>
+  </header>
+
+  <div class="toolbar">
+    <div class="control">
+      <label for="timeWindow">Show reports from</label>
+      <select id="timeWindow">
+        <option value="24">Last 24 hours</option>
+        <option value="72">Last 3 days</option>
+        <option value="168">Last 7 days</option>
+        <option value="0">All time</option>
+      </select>
+    </div>
+    <div class="control">
+      <label for="whereFilter">Map layer</label>
+      <select id="whereFilter">
+        <option value="All">All locations</option>
+        <option value="Indoors">Indoors</option>
+        <option value="Garden">Garden</option>
+        <option value="Street/outdoors">Street / outdoors</option>
+      </select>
+    </div>
+    <div class="stat"><span class="stat-label">Reports shown</span><strong id="reportTotal">—</strong></div>
+    <div class="stat"><span class="stat-label">Squares reporting</span><strong id="activeCells">—</strong></div>
+  </div>
+
+  <div class="layout">
+    <div class="map-wrap">
+      <div id="map" aria-label="Interactive map of 50 metre fly reporting squares"></div>
+      <div class="loading" id="loading">Loading map data…</div>
+      <div class="legend" aria-label="Fly severity legend">
+        <div class="legend-row"><span class="swatch" style="background:var(--low)"></span>Low / no reports yet</div>
+        <div class="legend-row"><span class="swatch" style="background:var(--low)"></span>0–1 Reported low</div>
+        <div class="legend-row"><span class="swatch" style="background:var(--mild)"></span>2 Mild</div>
+        <div class="legend-row"><span class="swatch" style="background:var(--medium)"></span>3 Noticeable</div>
+        <div class="legend-row"><span class="swatch" style="background:var(--high)"></span>4 Lots</div>
+        <div class="legend-row"><span class="swatch" style="background:var(--severe)"></span>5 Severe</div>
+      </div>
+    </div>
+
+    <aside class="panel">
+      <h2>Report flies</h2>
+      <div class="selected" id="selectedText">Tap a square on the map to start.</div>
+      <div class="cell-summary" id="cellSummary" hidden>
+        <div class="mini"><span>Average severity</span><strong id="cellAverage">—</strong></div>
+        <div class="mini"><span>Reports in square</span><strong id="cellCount">—</strong></div>
+      </div>
+
+      <div class="field">
+        <label>How bad are the flies?</label>
+        <div class="severity" id="severityButtons"></div>
+      </div>
+
+      <div class="field">
+        <label for="whereSelect">Where are you seeing them?</label>
+        <select id="whereSelect">
+          <option selected>Indoors</option>
+          <option>Garden</option>
+          <option>Street/outdoors</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="notes">Comment <span style="font-weight:normal;color:var(--muted)">(optional)</span></label>
+        <textarea id="notes" maxlength="300" placeholder="Anything useful, e.g. particularly bad near bins"></textarea>
+      </div>
+
+      <button class="submit" id="submitButton" type="button" disabled>Submit report</button>
+      <div class="status" id="status" aria-live="polite"></div>
+      <p class="help">Please choose the nearest square rather than giving your house number. A report stores the grid square, not your exact address.</p>
+    </aside>
+  </div>
+  <p class="privacy">Map data © OpenStreetMap contributors. Square colours represent resident reports and should be interpreted alongside the number of reports in each square.</p>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function() {
+  'use strict';
+
+  const SEVERITY_LABELS = ['None', 'A few', 'Mild', 'Noticeable', 'Lots', 'Severe'];
+  const ESTATE = {centreLat:52.89631358779648, centreLon:-1.558539106342842, rows:19, columns:24, size:50};
+  let appData = null;
+  let map = null;
+  let selectedId = null;
+  let selectedSeverity = null;
+  const layers = {};
+  const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbxrbmzWnQNwBoW2e-hRZNJ6V6TkLmXXdCMwUxHonVylP2o4kwrNRcg02eb8bZSb5Ygg_g/exec';
+
+  const els = {
+    loading: document.getElementById('loading'),
+    timeWindow: document.getElementById('timeWindow'),
+    whereFilter: document.getElementById('whereFilter'),
+    reportTotal: document.getElementById('reportTotal'),
+    activeCells: document.getElementById('activeCells'),
+    selectedText: document.getElementById('selectedText'),
+    cellSummary: document.getElementById('cellSummary'),
+    cellAverage: document.getElementById('cellAverage'),
+    cellCount: document.getElementById('cellCount'),
+    severityButtons: document.getElementById('severityButtons'),
+    whereSelect: document.getElementById('whereSelect'),
+    notes: document.getElementById('notes'),
+    submitButton: document.getElementById('submitButton'),
+    status: document.getElementById('status'),
+    modeBadge: document.getElementById('modeBadge'),
+  };
+
+  buildSeverityButtons();
+  initMap();
+  bindEvents();
+  loadData();
+
+  function hasBackend() {
+    return /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/i.test(BACKEND_URL);
+  }
+
+  function loadBackendMap(hours) {
+    return new Promise(function(resolve, reject) {
+      if (!hasBackend()) {
+        reject(new Error('Backend URL has not been configured.'));
+        return;
+      }
+
+      const callback = '__flyTrackerMap_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      const script = document.createElement('script');
+      let finished = false;
+      const timer = setTimeout(function() {
+        cleanup();
+        reject(new Error('The map data request timed out.'));
+      }, 15000);
+
+      function cleanup() {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        try { delete window[callback]; } catch (_) { window[callback] = undefined; }
+        if (script.parentNode) script.parentNode.removeChild(script);
+      }
+
+      window[callback] = function(response) {
+        cleanup();
+        if (!response || response.ok !== true || !response.data) {
+          reject(new Error((response && response.error) || 'Could not load map data.'));
+          return;
+        }
+        resolve(response.data);
+      };
+
+      script.onerror = function() {
+        cleanup();
+        reject(new Error('Could not reach the Fly Tracker data service.'));
+      };
+
+      const qs = new URLSearchParams({
+        api: 'map',
+        hours: String(hours),
+        callback: callback
+      });
+      script.src = BACKEND_URL + '?' + qs.toString();
+      document.head.appendChild(script);
+    });
+  }
+
+  function postBackendReport(payload) {
+    return new Promise(function(resolve, reject) {
+      if (!hasBackend()) {
+        reject(new Error('Backend URL has not been configured.'));
+        return;
+      }
+
+      const frameName = 'flyTrackerPost_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      const iframe = document.createElement('iframe');
+      const form = document.createElement('form');
+      let submitted = false;
+      let settled = false;
+
+      iframe.name = frameName;
+      iframe.title = 'Fly Tracker submission';
+      iframe.style.display = 'none';
+
+      form.method = 'POST';
+      form.action = BACKEND_URL;
+      form.target = frameName;
+      form.style.display = 'none';
+
+      const fields = Object.assign({api: 'submit'}, payload);
+      Object.keys(fields).forEach(function(key) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = fields[key] === null || fields[key] === undefined ? '' : String(fields[key]);
+        form.appendChild(input);
+      });
+
+      function cleanup() {
+        if (form.parentNode) form.parentNode.removeChild(form);
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      }
+
+      const timer = setTimeout(function() {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        // Cross-origin responses cannot be inspected; after a navigation timeout we verify by reloading data.
+        resolve();
+      }, 4500);
+
+      iframe.onload = function() {
+        if (!submitted || settled) return;
+        settled = true;
+        clearTimeout(timer);
+        setTimeout(cleanup, 50);
+        resolve();
+      };
+
+      document.body.appendChild(iframe);
+      document.body.appendChild(form);
+      submitted = true;
+      form.submit();
+    });
+  }
+
+  function initMap() {
+    map = L.map('map', {zoomControl:true, preferCanvas:true}).setView([ESTATE.centreLat, ESTATE.centreLon], 16);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+  }
+
+  function bindEvents() {
+    els.timeWindow.addEventListener('change', loadData);
+    els.whereFilter.addEventListener('change', function(){ refreshGridStyles(); refreshSelectedSummary(); });
+    els.submitButton.addEventListener('click', submitReport);
+  }
+
+  function buildSeverityButtons() {
+    SEVERITY_LABELS.forEach(function(label, i) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.value = String(i);
+      b.setAttribute('aria-pressed', 'false');
+      b.innerHTML = '<strong>' + i + '</strong><span>' + label + '</span>';
+      b.addEventListener('click', function() {
+        selectedSeverity = i;
+        Array.from(els.severityButtons.children).forEach(function(x){ x.setAttribute('aria-pressed','false'); });
+        b.setAttribute('aria-pressed','true');
+        updateSubmitState();
+      });
+      els.severityButtons.appendChild(b);
+    });
+  }
+
+  function loadData() {
+    setStatus('', '');
+    els.loading.hidden = false;
+    const hours = Number(els.timeWindow.value);
+
+    if (hasBackend()) {
+      loadBackendMap(hours)
+        .then(function(data) {
+          els.modeBadge.textContent = data.stats && data.stats.testReports > 0 ? 'Prototype — includes test data' : 'Live resident map';
+          applyData(data);
+        })
+        .catch(function(err) {
+          els.loading.hidden = true;
+          setStatus((err && err.message) || 'Could not load map data.', 'err');
+        });
+    } else {
+      els.modeBadge.textContent = 'Setup preview — backend not linked';
+      setTimeout(function(){ applyData(makeDemoData(hours)); }, 120);
+    }
+  }
+
+  function applyData(data) {
+    appData = data;
+    els.loading.hidden = true;
+    els.reportTotal.textContent = data.stats.reports;
+    els.activeCells.textContent = data.stats.activeCells;
+    drawGrid();
+    refreshSelectedSummary();
+  }
+
+  function drawGrid() {
+    if (!appData) return;
+    const existingIds = new Set(appData.grid.map(function(c){return c.id;}));
+    Object.keys(layers).forEach(function(id) {
+      if (!existingIds.has(id)) { map.removeLayer(layers[id]); delete layers[id]; }
+    });
+
+    const bounds = [];
+    appData.grid.forEach(function(cell) {
+      bounds.push([cell.south, cell.west], [cell.north, cell.east]);
+      let rect = layers[cell.id];
+      if (!rect) {
+        rect = L.rectangle([[cell.south, cell.west], [cell.north, cell.east]], styleForCell(cell.id));
+        rect.addTo(map);
+        rect.on('click', function(){ selectCell(cell.id); });
+        layers[cell.id] = rect;
+      } else {
+        rect.setBounds([[cell.south, cell.west], [cell.north, cell.east]]);
+        rect.setStyle(styleForCell(cell.id));
+      }
+      rect.bindTooltip(tooltipForCell(cell.id), {sticky:true, className:'grid-tip'});
+    });
+    if (!map.__fitted && bounds.length) { map.fitBounds(bounds, {padding:[8,8]}); map.__fitted = true; }
+  }
+
+  function refreshGridStyles() {
+    if (!appData) return;
+    Object.keys(layers).forEach(function(id) {
+      layers[id].setStyle(styleForCell(id));
+      layers[id].setTooltipContent(tooltipForCell(id));
+    });
+  }
+
+  function getCellMetric(id) {
+    if (!appData || !appData.cells[id]) return {count:0, average:null};
+    const all = appData.cells[id];
+    const filter = els.whereFilter.value;
+    if (filter === 'All') return {count:all.count, average:all.average};
+    const b = all.byWhere && all.byWhere[filter];
+    return b ? {count:b.count, average:b.average} : {count:0, average:null};
+  }
+
+  function styleForCell(id) {
+    const metric = getCellMetric(id);
+    const selected = id === selectedId;
+    const colour = metric.count === 0 ? '#66bd63' : severityColour(metric.average);
+    const minReports = appData ? Number(appData.config.minReportsStrongColour || 3) : 3;
+    const fillOpacity = metric.count === 0 ? 0.22 : (metric.count < minReports ? 0.32 : 0.60);
+    return {
+      color: selected ? '#0b4f6c' : '#5c6973',
+      weight: selected ? 3 : 0.7,
+      opacity: selected ? 1 : 0.7,
+      fillColor: colour,
+      fillOpacity: fillOpacity,
+      dashArray: metric.count > 0 && metric.count < minReports ? '3 3' : null,
+    };
+  }
+
+  function severityColour(avg) {
+    if (avg === null || avg === undefined || !Number.isFinite(Number(avg))) return '#dfe5ea';
+    const n = Number(avg);
+    if (n < 1.5) return '#66bd63';
+    if (n < 2.5) return '#d9ef8b';
+    if (n < 3.5) return '#fee08b';
+    if (n < 4.5) return '#f46d43';
+    return '#d73027';
+  }
+
+  function tooltipForCell(id) {
+    const m = getCellMetric(id);
+    if (!m.count) return '<strong>' + escapeHtml(id) + '</strong><br>No reports yet — shown as Low by default';
+    return '<strong>' + escapeHtml(id) + '</strong><br>Average: ' + m.average.toFixed(1) + ' / 5<br>' + m.count + ' report' + (m.count === 1 ? '' : 's');
+  }
+
+  function selectCell(id) {
+    const previous = selectedId;
+    selectedId = id;
+    if (previous && layers[previous]) layers[previous].setStyle(styleForCell(previous));
+    if (layers[id]) layers[id].setStyle(styleForCell(id));
+    refreshSelectedSummary();
+    updateSubmitState();
+  }
+
+  function refreshSelectedSummary() {
+    if (!selectedId) {
+      els.selectedText.textContent = 'Tap a square on the map to start.';
+      els.cellSummary.hidden = true;
+      return;
+    }
+    const metric = getCellMetric(selectedId);
+    els.selectedText.textContent = 'Selected square ' + selectedId + ' (50 m × 50 m)';
+    els.cellSummary.hidden = false;
+    els.cellAverage.textContent = metric.count ? metric.average.toFixed(1) + ' / 5' : 'Low default';
+    els.cellCount.textContent = String(metric.count);
+  }
+
+  function updateSubmitState() {
+    els.submitButton.disabled = !(selectedId && selectedSeverity !== null);
+  }
+
+  function submitReport() {
+    if (!selectedId || selectedSeverity === null) return;
+    const payload = {
+      gridId: selectedId,
+      severity: selectedSeverity,
+      where: els.whereSelect.value || 'Indoors',
+      notes: els.notes.value.trim(),
+      hours: Number(els.timeWindow.value),
+    };
+
+    els.submitButton.disabled = true;
+    els.submitButton.textContent = 'Submitting…';
+    setStatus('', '');
+
+    if (hasBackend()) {
+      const beforeCount = appData && appData.stats ? Number(appData.stats.reports || 0) : 0;
+      postBackendReport(payload)
+        .then(function() {
+          return new Promise(function(resolve){ setTimeout(resolve, 500); });
+        })
+        .then(function() {
+          return loadBackendMap(Number(els.timeWindow.value));
+        })
+        .then(function(data) {
+          appData = data;
+          els.reportTotal.textContent = appData.stats.reports;
+          els.activeCells.textContent = appData.stats.activeCells;
+          refreshGridStyles();
+          refreshSelectedSummary();
+          resetFormAfterSuccess();
+          els.submitButton.textContent = 'Submit report';
+          const afterCount = Number(appData.stats.reports || 0);
+          setStatus(
+            afterCount >= beforeCount
+              ? 'Thanks — your report has been submitted.'
+              : 'Submission sent. Refresh the map in a moment to confirm it appears.',
+            'ok'
+          );
+        })
+        .catch(function(err) {
+          els.submitButton.textContent = 'Submit report';
+          updateSubmitState();
+          setStatus((err && err.message) || 'Could not submit the report.', 'err');
+        });
+    } else {
+      setTimeout(function() {
+        addDemoReport(payload);
+        els.submitButton.textContent = 'Submit report';
+        resetFormAfterSuccess();
+        setStatus('Preview report added locally. Link the Apps Script backend before sharing this page.', 'ok');
+      }, 180);
+    }
+  }
+
+  function resetFormAfterSuccess() {
+    selectedSeverity = null;
+    Array.from(els.severityButtons.children).forEach(function(x){ x.setAttribute('aria-pressed','false'); });
+    els.whereSelect.value = 'Indoors';
+    els.notes.value = '';
+    updateSubmitState();
+  }
+
+  function addDemoReport(payload) {
+    if (!appData.cells[payload.gridId]) {
+      appData.cells[payload.gridId] = {count:0, average:0, byWhere:{'Indoors':{count:0,average:null},'Garden':{count:0,average:null},'Street/outdoors':{count:0,average:null}}};
+    }
+    const c = appData.cells[payload.gridId];
+    const newSum = c.average * c.count + payload.severity;
+    c.count++;
+    c.average = Math.round((newSum / c.count) * 10) / 10;
+    const b = c.byWhere[payload.where];
+    const bSum = (b.average || 0) * b.count + payload.severity;
+    b.count++;
+    b.average = Math.round((bSum / b.count) * 10) / 10;
+    appData.stats.reports++;
+    appData.stats.activeCells = Object.keys(appData.cells).filter(function(id){return appData.cells[id].count > 0;}).length;
+    els.reportTotal.textContent = appData.stats.reports;
+    els.activeCells.textContent = appData.stats.activeCells;
+    refreshGridStyles();
+    refreshSelectedSummary();
+  }
+
+  function setStatus(message, type) {
+    els.status.textContent = message;
+    els.status.className = 'status' + (type ? ' ' + type : '');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>'"]/g, function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch];});
+  }
+
+  function makeDemoData(hours) {
+    const grid = makeGrid(ESTATE);
+    const cells = {};
+    let total = 0;
+    let state = 896538 >>> 0;
+    function rnd(){ state=(1664525*state+1013904223)>>>0; return state/4294967296; }
+    function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n));}
+    const reportCount = hours === 24 ? 58 : hours === 72 ? 87 : 112;
+    for (let i=0;i<reportCount;i++) {
+      let col,row,base;
+      const zone=rnd();
+      if(zone<.62){col=clamp(Math.round(9+(rnd()-.5)*6),1,24);row=clamp(Math.round(10+(rnd()-.5)*6),1,19);base=4.2;}
+      else if(zone<.85){col=clamp(Math.round(16+(rnd()-.5)*5),1,24);row=clamp(Math.round(7+(rnd()-.5)*5),1,19);base=2.8;}
+      else {col=1+Math.floor(rnd()*24);row=1+Math.floor(rnd()*19);base=1.2;}
+      const id=String.fromCharCode(64+col)+String(row).padStart(2,'0');
+      const sev=clamp(Math.round(base+(rnd()-.5)*2.4),0,5);
+      const where=rnd()<.62?'Indoors':(rnd()<.58?'Garden':'Street/outdoors');
+      if(!cells[id]) cells[id]={count:0,sum:0,average:0,byWhere:{'Indoors':{count:0,sum:0,average:null},'Garden':{count:0,sum:0,average:null},'Street/outdoors':{count:0,sum:0,average:null}}};
+      const c=cells[id];c.count++;c.sum+=sev;const b=c.byWhere[where];b.count++;b.sum+=sev;total++;
+    }
+    Object.keys(cells).forEach(function(id){const c=cells[id];c.average=Math.round(c.sum/c.count*10)/10;delete c.sum;Object.keys(c.byWhere).forEach(function(w){const b=c.byWhere[w];b.average=b.count?Math.round(b.sum/b.count*10)/10:null;delete b.sum;});});
+    return {config:{title:'The Pastures Fly Tracker',gridSizeMetres:50,centreLat:ESTATE.centreLat,centreLon:ESTATE.centreLon,rows:19,columns:24,defaultTimeWindowHours:24,minReportsStrongColour:3,defaultWhere:'Indoors'},grid:grid,cells:cells,stats:{reports:total,activeCells:Object.keys(cells).length,testReports:total,residentReports:0},windowHours:hours,defaultWhere:'Indoors'};
+  }
+
+  function makeGrid(cfg) {
+    const latStep=cfg.size/111320;
+    const lonStep=cfg.size/(111320*Math.cos(cfg.centreLat*Math.PI/180));
+    const out=[];
+    for(let r=1;r<=cfg.rows;r++){
+      const lat=cfg.centreLat+(r-(cfg.rows+1)/2)*latStep;
+      for(let c=1;c<=cfg.columns;c++){
+        const lon=cfg.centreLon+(c-(cfg.columns+1)/2)*lonStep;
+        out.push({id:String.fromCharCode(64+c)+String(r).padStart(2,'0'),row:r,column:String.fromCharCode(64+c),colIndex:c,lat:lat,lon:lon,south:lat-latStep/2,north:lat+latStep/2,west:lon-lonStep/2,east:lon+lonStep/2});
+      }
+    }
+    return out;
+  }
+})();
+</script>
+</body>
+</html>
